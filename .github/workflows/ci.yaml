@@ -77,6 +77,9 @@ jobs:
         run: |
           docker run -d --name staging -p 8080:8080 myapp:staging
           docker ps
+      # 🪵 Add this right after
+      - name: Show container logs
+        run: docker logs staging
 
       # Optional: health check to ensure the app is running
       - name: Verify container is healthy
