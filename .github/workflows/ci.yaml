@@ -32,9 +32,9 @@ jobs:
           path: target/*.jar
 
   deploy:
+    if: false
     needs: build
     runs-on: ubuntu-latest
-    if: success()
 
     steps:
       - name: Download artifact
