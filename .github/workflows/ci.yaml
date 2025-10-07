@@ -32,24 +32,31 @@ jobs:
           path: target/*.jar
 
   deploy:
-    if: false
     needs: build
     runs-on: ubuntu-latest
+    if: success()
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: app-jar
           path: target/
 
-      - name: Deploy to staging
-        env:
-          SSH_HOST: ${{ secrets.STAGING_HOST }}
-          SSH_USER: ${{ secrets.STAGING_USER }}
-          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Set up Docker
         run: |
-          echo "$SSH_KEY" > key.pem
-          chmod 600 key.pem
-          scp -i key.pem target/*.jar $SSH_USER@$SSH_HOST:/opt/app/
-          ssh -i key.pem $SSH_USER@$SSH_HOST "sudo systemctl restart myapp"
+          sudo apt-get update
+          sudo apt-get install -y docker.io
+          sudo systemctl start docker
+
+      - name: Build Docker image
+        run: |
+          docker build -t myapp:staging -f docker/Dockerfile .
+
+      - name: Run container (staging simulation)
+        run: |
+          docker run -d --name staging -p 8080:8080 myapp:staging
+          docker ps
