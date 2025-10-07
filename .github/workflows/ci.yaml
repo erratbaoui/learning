@@ -90,7 +90,7 @@ jobs:
       - name: Verify container is healthy
         run: |
           sleep 5
-          if ! curl -s http://localhost:8080 | grep -q "Hello"; then
+          if ! curl -s http://localhost:8080/actuator/health | grep -q "UP"; then
             echo "Container health check failed"
             docker logs staging
             exit 1
