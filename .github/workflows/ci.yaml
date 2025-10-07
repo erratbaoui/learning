@@ -1,10 +1,8 @@
-name: Java CI
+name: Java CI/CD
 
 on:
   push:
-    branches: [ main, develop ]
-  pull_request:
-    branches: [ main, develop ]
+    branches: [ main ]
 
 jobs:
   build:
@@ -26,16 +24,31 @@ jobs:
       - name: Run tests
         run: mvn test --file pom.xml
 
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: target/surefire-reports/
-
-      - name: Upload built JAR
+      - name: Upload build artifact
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: app-jar
           path: target/*.jar
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: success()
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: app-jar
+
+      - name: Deploy to staging
+        env:
+          SSH_HOST: ${{ secrets.STAGING_HOST }}
+          SSH_USER: ${{ secrets.STAGING_USER }}
+          SSH_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        run: |
+          echo "$SSH_KEY" > key.pem
+          chmod 600 key.pem
+          scp -i key.pem target/*.jar $SSH_USER@$SSH_HOST:/opt/app/
+          ssh -i key.pem $SSH_USER@$SSH_HOST "sudo systemctl restart myapp"
