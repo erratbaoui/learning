@@ -1,4 +1,4 @@
-name: Java CI/CD with Docker Staging
+name: Java CI/CD with Docker and GHCR
 
 on:
   push:
@@ -11,26 +11,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ✅ Checkout source code
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # ✅ Set up Java environment
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Cache Maven dependencies
-        uses: actions/cache@v3
+      # ✅ Cache Maven dependencies
+      - name: Cache Maven packages
+        uses: actions/cache@v4
         with:
           path: ~/.m2
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-
 
+      # ✅ Build the project
       - name: Build with Maven
         run: mvn -B clean package --file pom.xml
 
+      # ✅ Run unit tests
+      - name: Run tests
+        run: mvn test --file pom.xml
+
+      # ✅ Upload build artifact for deploy stage
       - name: Upload build artifact
         if: success()
         uses: actions/upload-artifact@v4
@@ -44,39 +53,65 @@ jobs:
     if: success()
 
     steps:
+      # ✅ Checkout code again for Docker context
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # ✅ Download artifact from build job
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: app-jar
           path: target
 
-      - name: Set up Docker Buildx
+      # ✅ Set up Docker environment
+      - name: Set up Docker
         uses: docker/setup-buildx-action@v3
 
-      - name: Verify JAR file exists
+      # ✅ Verify JAR exists
+      - name: Verify JAR file
         run: ls -lh target/
 
+      # ✅ Build Docker image (using your Dockerfile)
       - name: Build Docker image
         run: docker build -t myapp:staging -f docker/Dockerfile .
 
-      - name: Verify files for Docker
-        run: ls -lh . docker target
-
-      - name: Run container
+      # ✅ Run container locally for health check
+      - name: Run container for testing
         run: |
-          docker run -d --rm --name staging -p 8080:8080 myapp:staging
+          docker run -d --name staging -p 8080:8080 myapp:staging
           docker ps
 
+      # ✅ Show logs (optional debugging)
       - name: Show container logs
-        run: docker logs staging
+        run: docker logs staging || true
 
+      # ✅ Health check (basic)
       - name: Verify container is healthy
         run: |
-          sleep 10
-          if ! curl -s http://localhost:8080/actuator/health | grep "UP"; then
+          sleep 5
+          if ! curl -s http://localhost:8080 | grep -q "Hello"; then
             echo "Container health check failed"
+            docker logs staging
             exit 1
           fi
+
+      # ✅ Log in to GitHub Container Registry
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      # ✅ Tag image for GHCR
+      - name: Tag Docker image for GHCR
+        run: |
+          IMAGE_NAME=ghcr.io/${{ secrets.GHCR_USERNAME }}/myapp:staging
+          docker tag myapp:staging $IMAGE_NAME
+
+      # ✅ Push image to GHCR
+      - name: Push Docker image to GHCR
+        run: |
+          IMAGE_NAME=ghcr.io/${{ secrets.GHCR_USERNAME }}/myapp:staging
+          docker push $IMAGE_NAME
