@@ -1,7 +1,9 @@
-name: Java CI/CD
+name: Java CI/CD with Docker Staging
 
 on:
   push:
+    branches: [ main ]
+  pull_request:
     branches: [ main ]
 
 jobs:
@@ -9,21 +11,35 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # Checkout source code
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Set up Java
       - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
+      # Cache Maven dependencies
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      # Build the project
       - name: Build with Maven
         run: mvn -B clean package --file pom.xml
 
+      # Run tests
       - name: Run tests
         run: mvn test --file pom.xml
 
+      # Upload artifact for deploy
       - name: Upload build artifact
         if: success()
         uses: actions/upload-artifact@v4
@@ -37,26 +53,36 @@ jobs:
     if: success()
 
     steps:
+      # Checkout code again
       - name: Checkout code
         uses: actions/checkout@v4
 
+      # Download the artifact from build job
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
           name: app-jar
           path: target/
 
+      # Set up Docker environment (no apt-get needed)
       - name: Set up Docker
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y docker.io
-          sudo systemctl start docker
+        uses: docker/setup-docker@v3
 
+      # Build Docker image using your Dockerfile in docker/
       - name: Build Docker image
-        run: |
-          docker build -t myapp:staging -f docker/Dockerfile .
+        run: docker build -t myapp:staging -f docker/Dockerfile .
 
-      - name: Run container (staging simulation)
+      # Run container as staging simulation
+      - name: Run container
         run: |
           docker run -d --name staging -p 8080:8080 myapp:staging
           docker ps
+
+      # Optional: health check to ensure the app is running
+      - name: Verify container is healthy
+        run: |
+          sleep 5
+          if ! curl -s http://localhost:8080/actuator/health | grep "UP"; then
+            echo "Container health check failed"
+            exit 1
+          fi
