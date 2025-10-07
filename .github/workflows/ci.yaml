@@ -66,7 +66,7 @@ jobs:
 
       # Set up Docker environment (no apt-get needed)
       - name: Set up Docker
-        uses: docker/setup-docker@v3
+        uses: docker/setup-buildx-action@v3
 
       # Build Docker image using your Dockerfile in docker/
       - name: Build Docker image
